@@ -1,0 +1,78 @@
+:root {
+  /* Brand Color Palette from Combined UI Reference */
+  --color-primary-navy: #101c2c;
+  --color-primary-navy-dark: #0a121e;
+  --color-primary-navy-light: #1c2e44;
+  --color-deep-blue: #20334a;
+  
+  --color-accent-gold: #d8b56d;
+  --color-accent-gold-hover: #c9a456;
+  --color-accent-gold-light: #f5eedc;
+  
+  --color-success-green: #28785c;
+  --color-success-green-light: #eaf5f0;
+  --color-success-green-text: #1b5e46;
+  
+  --color-danger-red: #d33838;
+  --color-danger-red-light: #fdf0f0;
+  
+  --color-warning-amber: #e69d28;
+  --color-warning-amber-light: #fef7ec;
+  
+  /* Neutral & Surface Colors */
+  --color-bg-app: #f6f7f9;
+  --color-bg-card: #ffffff;
+  --color-bg-surface-warm: #f6f3ea;
+  --color-bg-subtle: #f0f2f5;
+  --color-bg-dark: #101c2c;
+  
+  --color-border: #e3e6eb;
+  --color-border-subtle: #edf0f4;
+  --color-border-dark: #263850;
+  
+  /* Typography Colors */
+  --color-text-primary: #111827;
+  --color-text-secondary: #576577;
+  --color-text-muted: #8c9ba8;
+  --color-text-inverted: #ffffff;
+  --color-text-gold: #c29947;
+  
+  /* Typography */
+  --font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.8125rem;  /* 13px */
+  --font-size-base: 0.875rem; /* 14px */
+  --font-size-md: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;   /* 18px */
+  --font-size-xl: 1.25rem;    /* 20px */
+  --font-size-2xl: 1.5rem;    /* 24px */
+  --font-size-3xl: 1.75rem;   /* 28px */
+  --font-size-4xl: 2.125rem;  /* 34px */
+  
+  /* Spacing */
+  --spacing-2xs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 20px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  
+  /* Border Radius */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(16, 28, 44, 0.05);
+  --shadow-card: 0 4px 12px rgba(16, 28, 44, 0.06);
+  --shadow-elevated: 0 10px 25px rgba(16, 28, 44, 0.1);
+  --shadow-nav: 0 -4px 16px rgba(16, 28, 44, 0.06);
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+}
