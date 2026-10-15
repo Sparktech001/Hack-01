@@ -11,11 +11,101 @@ const ROUTES = {
   'BMONI sandbox': ['/api/bmoni/balances', '/api/bmoni/transactions'],
 };
 
+// The switch is available by default. Set VITE_DEMO_MODE_ENABLED=false at build
+// time to remove simulated access from a deployed build.
+const DEMO_MODE_ENABLED = import.meta.env.VITE_DEMO_MODE_ENABLED !== 'false';
+const DEMO_MODE_DEFAULT = import.meta.env.VITE_DEMO_MODE_DEFAULT === 'true';
+let demoModeActive = false;
+
+function initialDemoState() {
+  return {
+    wallet: { availableBalance: 42800, currency: 'NGN', label: 'Simulated balance', asOf: '2026-10-15T09:00:00Z' },
+    score: { score: 72, band: 'Building', disclaimer: 'Simulated advisory score. It does not guarantee repayment or loan approval.' },
+    loans: [
+      { id: 'demo-loan-201', title: 'Course materials', purpose: 'Engineering textbooks and lab materials', amount: 65000, amountFunded: 42000, termMonths: 3, status: 'Open', createdAt: '2026-10-10T10:00:00Z' },
+      { id: 'demo-loan-202', title: 'Accommodation deposit', purpose: 'Shared student accommodation deposit', amount: 90000, amountFunded: 54000, termMonths: 4, status: 'Open', createdAt: '2026-10-08T10:00:00Z' },
+      { id: 'demo-loan-203', title: 'Laptop repair', purpose: 'Laptop screen repair for coursework', amount: 38000, amountFunded: 38000, termMonths: 2, status: 'Active', createdAt: '2026-09-21T10:00:00Z' },
+    ],
+    transactions: [
+      { id: 'demo-tx-301', title: 'Simulated peer contribution', type: 'contribution', amount: 12000, status: 'Completed', createdAt: '2026-10-14T11:30:00Z' },
+      { id: 'demo-tx-302', title: 'Simulated repayment', type: 'repayment', amount: 9500, status: 'Completed', createdAt: '2026-10-12T09:15:00Z' },
+      { id: 'demo-tx-303', title: 'Simulated allowance', type: 'credit', amount: 30000, status: 'Completed', createdAt: '2026-10-08T12:00:00Z' },
+    ],
+    approvals: [{ id: 'demo-approval-401', action: 'Repayment request', amount: 9500, recipient: 'B Moni student loan', status: 'Pending' }],
+    returns: [{ id: 'demo-return-501', loanId: 'demo-loan-203', principal: 25000, expectedReturn: 26250, status: 'Simulated' }],
+    sandbox: { balances: [{ account: 'BMONI Sandbox NGN', balance: 150000, currency: 'NGN', environment: 'Sandbox' }], transactions: [{ id: 'demo-sandbox-601', type: 'Sandbox credit', amount: 150000, status: 'Simulated', createdAt: '2026-10-01T08:00:00Z' }] },
+    schedules: { 'demo-loan-203': [{ installment: 1, dueDate: '2026-10-28T00:00:00Z', amount: 19500, status: 'Upcoming' }, { installment: 2, dueDate: '2026-11-28T00:00:00Z', amount: 19500, status: 'Upcoming' }] },
+  };
+}
+
+function readDemoState() {
+  try { return { ...initialDemoState(), ...JSON.parse(localStorage.getItem('bmoni_demo_data') || '{}') }; }
+  catch { return initialDemoState(); }
+}
+
+function writeDemoState(state) { localStorage.setItem('bmoni_demo_data', JSON.stringify(state)); }
+
+async function demoRequest(path, { method = 'GET', body } = {}) {
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  const state = readDemoState();
+  if (path === '/api/bootstrap') return { ready: true, accounts: [{ email: 'demo.student@bmoni.example', role: 'Student' }, { email: 'demo.lender@bmoni.example', role: 'Lender' }] };
+  if (path === '/api/me') return { id: 'demo-student-1', fullName: 'Demo Student', role: 'Student' };
+  if (path === '/api/dashboard') return { label: 'Simulated overview', nextAction: 'Review a pending simulated approval', environment: 'Demo' };
+  if (path === '/api/wallet') return state.wallet;
+  if (path === '/api/score') return state.score;
+  if (path === '/api/transactions') return state.transactions;
+  if (path === '/api/approvals/pending') return state.approvals.filter((item) => item.status === 'Pending');
+  if (path === '/api/loans?role=open') return state.loans.filter((item) => item.status === 'Open');
+  if (path === '/api/loans') return state.loans;
+  if (path === '/api/lender/returns') return state.returns;
+  if (path === '/api/bmoni/balances') return state.sandbox.balances;
+  if (path === '/api/bmoni/transactions') return state.sandbox.transactions;
+  const schedule = path.match(/^\/api\/loans\/([^/]+)\/schedule$/);
+  if (schedule) return state.schedules[decodeURIComponent(schedule[1])] || [];
+  const detail = path.match(/^\/api\/loans\/([^/]+)$/);
+  if (detail && method === 'GET') return state.loans.find((item) => item.id === decodeURIComponent(detail[1])) || { id: detail[1], status: 'Simulated' };
+  if (path === '/api/auth/login') return { token: 'simulated-session', user: { fullName: 'Demo Student' } };
+  if (method === 'POST' && path === '/api/loans') {
+    const loan = { id: `demo-loan-${Date.now()}`, title: body?.purpose || 'Student loan request', purpose: body?.purpose || 'Student expenses', amount: Number(body?.amount || 0), amountFunded: 0, termMonths: Number(body?.termMonths || 3), status: 'Open', createdAt: new Date().toISOString() };
+    state.loans.unshift(loan); writeDemoState(state); return loan;
+  }
+  const contribution = path.match(/^\/api\/loans\/([^/]+)\/contributions$/);
+  if (contribution && method === 'POST') {
+    const loan = state.loans.find((item) => item.id === decodeURIComponent(contribution[1]));
+    if (loan) loan.amountFunded = Math.min(loan.amount, loan.amountFunded + Number(body?.amount || 0));
+    state.transactions.unshift({ id: `demo-tx-${Date.now()}`, title: 'Simulated peer contribution', amount: Number(body?.amount || 0), status: 'Completed', createdAt: new Date().toISOString() });
+    writeDemoState(state); return { success: true, simulated: true };
+  }
+  const repayment = path.match(/^\/api\/loans\/([^/]+)\/repayments$/);
+  if (repayment && method === 'POST') {
+    state.approvals.unshift({ id: `demo-approval-${Date.now()}`, action: 'Repayment request', loanId: decodeURIComponent(repayment[1]), amount: Number(body?.amount || 0), recipient: 'B Moni student loan', status: 'Pending' });
+    writeDemoState(state); return { success: true, status: 'Pending approval', simulated: true };
+  }
+  const approval = path.match(/^\/api\/approvals\/([^/]+)\/(confirm|reject)$/);
+  if (approval && method === 'POST') {
+    const item = state.approvals.find((row) => row.id === decodeURIComponent(approval[1]));
+    if (item) item.status = approval[2] === 'confirm' ? 'Confirmed' : 'Rejected';
+    if (item && approval[2] === 'confirm') state.transactions.unshift({ id: `demo-tx-${Date.now()}`, title: `Confirmed simulated ${String(item.action).toLowerCase()}`, amount: item.amount, status: 'Completed', createdAt: new Date().toISOString() });
+    writeDemoState(state); return { success: true, status: item?.status || 'Updated', simulated: true };
+  }
+  if (path === '/api/scam-check' && method === 'POST') return { result: 'Advisory only', message: 'Pause before sharing money or personal information. Verify requests through an official channel.', simulated: true };
+  if (path === '/api/assistant/chat' && method === 'POST') return { answer: 'I can explain loan terms and help you think through a budget. I cannot approve or authorize payments.', advisoryOnly: true, simulated: true };
+  if (path === '/api/bmoni/transfers' && method === 'POST') {
+    state.sandbox.transactions.unshift({ id: `demo-sandbox-${Date.now()}`, type: 'Sandbox transfer', amount: Number(body?.amount || 0), recipient: body?.recipient || 'Demo recipient', status: 'Simulated', createdAt: new Date().toISOString() });
+    writeDemoState(state); return { success: true, status: 'Simulated sandbox transfer' };
+  }
+  if (path.startsWith('/api/loans/') && path.endsWith('/assess')) return { assessment: 'Simulated assessment', reasons: ['Demo profile data used', 'This result does not guarantee repayment or approval'], simulated: true };
+  if (path.startsWith('/api/loans/') && path.endsWith('/accept-terms')) return { success: true, status: 'Simulated terms accepted' };
+  if (path === '/api/bmoni/accounts/verify-nigerian' || path === '/api/bmoni/onboarding/nigeria') return { success: true, status: 'Sandbox only', simulated: true };
+  return { success: true, simulated: true };
+}
+
 function apiRoot() {
   return (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '').replace(/\/api$/i, '');
 }
 
 async function api(path, { method = 'GET', body, formData, idempotencyKey } = {}) {
+  if (demoModeActive) return demoRequest(path, { method, body });
   const root = apiRoot();
   if (!root) throw new Error('Set VITE_API_BASE_URL to connect to the B Moni API. No demo data is being shown.');
   const token = localStorage.getItem('bmoni_token');
@@ -86,11 +176,20 @@ function usePanelData(paths, active) {
     const errors = results.filter((result) => result.error);
     setState({ loading: false, error: errors.map((result) => `${result.path}: ${result.error}`).join(' '), data: results.filter((result) => !result.error) });
   }, [active, paths]);
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    reload();
+    window.addEventListener('bmoni:data-changed', reload);
+    return () => window.removeEventListener('bmoni:data-changed', reload);
+  }, [reload]);
   return { ...state, reload };
 }
 
-function Login({ onLogin }) {
+function DemoToggle({ active, onToggle, className = '' }) {
+  if (!DEMO_MODE_ENABLED) return null;
+  return <button type="button" className={`demo-toggle ${className}`} onClick={onToggle} aria-pressed={active} title={active ? 'Turn demo mode off' : 'Turn demo mode on'}><span className="demo-toggle-label">Demo</span><span className={`toggle-track ${active ? 'on' : ''}`} aria-hidden="true"><span /></span><span className="demo-toggle-state">{active ? 'On' : 'Off'}</span></button>;
+}
+
+function Login({ onLogin, onToggleDemo, demoMode }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [options, setOptions] = useState([]);
@@ -114,7 +213,7 @@ function Login({ onLogin }) {
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   }
-  return <main className="login-wrap"><section className="login-card">
+  return <main className="login-wrap"><DemoToggle className="login-demo-toggle" active={demoMode} onToggle={onToggleDemo} /><section className="login-card">
     <Brand /><div className="environment"><span />Demo environment</div>
     <p className="eyebrow">STUDENT FINANCE, TOGETHER</p><h1>Good to have you here.</h1><p className="muted">Sign in to manage your simulated student finance activity.</p>
     <form onSubmit={submit} className="form">
@@ -133,23 +232,40 @@ function Brand() { return <a className="brand" href="#overview" aria-label="B Mo
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('bmoni_token'));
   const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem('bmoni_user')); } catch { return null; } });
+  const [demoMode, setDemoMode] = useState(() => DEMO_MODE_ENABLED && (sessionStorage.getItem('bmoni_demo_mode') === 'true' || (sessionStorage.getItem('bmoni_demo_mode') == null && DEMO_MODE_DEFAULT)));
   const [active, setActive] = useState('Overview');
   const [flash, setFlash] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
+  demoModeActive = demoMode;
   const nav = Object.keys(ROUTES);
   useEffect(() => { const logout = () => { setToken(null); setUser(null); }; window.addEventListener('bmoni:logout', logout); return () => window.removeEventListener('bmoni:logout', logout); }, []);
   useEffect(() => { const navigate = (event) => setActive(event.detail); window.addEventListener('bmoni:navigate', navigate); return () => window.removeEventListener('bmoni:navigate', navigate); }, []);
-  if (!token) return <Login onLogin={(profile) => { setToken(localStorage.getItem('bmoni_token')); setUser(profile); setActive('Overview'); }} />;
+  function toggleDemo() {
+    const next = !demoMode;
+    setDemoMode(next);
+    sessionStorage.setItem('bmoni_demo_mode', String(next));
+    if (next) {
+      localStorage.removeItem('bmoni_token');
+      localStorage.removeItem('bmoni_user');
+      setToken(null);
+      setUser({ fullName: 'Demo Student', role: 'Student' });
+    } else {
+      setToken(null);
+      setUser(null);
+    }
+    setActive('Overview');
+  }
+  if (!token && !demoMode) return <Login demoMode={demoMode} onToggleDemo={toggleDemo} onLogin={(profile) => { setToken(localStorage.getItem('bmoni_token')); setUser(profile); setActive('Overview'); }} />;
   return <div className="app-shell">
-    <aside className="sidebar"><Brand /><p className="nav-label">YOUR FINANCES</p><nav aria-label="Main navigation">{nav.map((item, index) => <button key={item} className={`nav-item ${active === item ? 'selected' : ''}`} onClick={() => setActive(item)}><span className="nav-icon">{['◫', '↗', '◎', '↔', '✓', '✳', '▦'][index]}</span>{item}</button>)}</nav><div className="sidebar-bottom"><div className="demo-note"><span className="dot" />Demo environment<p>Activity and balances shown here are simulated.</p></div><button className="nav-item logout" onClick={() => { localStorage.removeItem('bmoni_token'); localStorage.removeItem('bmoni_user'); setToken(null); setUser(null); }}>↗ <span>Sign out</span></button></div></aside>
-    <main className="main-area"><header className="topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-right"><span className="environment"><span />Demo environment</span><span className="avatar">{(user?.firstName || user?.name || user?.fullName || 'S').slice(0, 1).toUpperCase()}</span></div></header>
+    <aside className="sidebar"><Brand /><p className="nav-label">YOUR FINANCES</p><nav aria-label="Main navigation">{nav.map((item, index) => <button key={item} className={`nav-item ${active === item ? 'selected' : ''}`} onClick={() => setActive(item)}><span className="nav-icon">{['◫', '↗', '◎', '↔', '✓', '✳', '▦'][index]}</span>{item}</button>)}</nav><div className="sidebar-bottom"><div className="demo-note"><span className="dot" />{demoMode ? 'Demo mode is on' : 'Demo environment'}<p>{demoMode ? 'Actions and money values are simulated.' : 'Activity and balances shown here are simulated.'}</p></div><DemoToggle active={demoMode} onToggle={toggleDemo} /><button className="nav-item logout" onClick={() => { localStorage.removeItem('bmoni_token'); localStorage.removeItem('bmoni_user'); setToken(null); setUser(null); }}>↗ <span>Sign out</span></button></div></aside>
+    <main className="main-area"><header className="topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-right"><DemoToggle active={demoMode} onToggle={toggleDemo} /><span className="environment"><span />{demoMode ? 'Demo mode' : 'Demo environment'}</span><span className="avatar">{(user?.firstName || user?.name || user?.fullName || 'S').slice(0, 1).toUpperCase()}</span></div></header>
       <div className="page-content"><div className="page-heading"><div><p className="eyebrow">B MONI · STUDENT FINANCE</p><h1>{active === 'Overview' ? 'Your money, in view.' : active}</h1><p className="muted">{active === 'Overview' ? 'A clear picture of your simulated activity.' : descriptions[active]}</p></div>{active === 'Loans' && <button className="button primary" onClick={() => setPendingAction({ type: 'create-loan' })}>Request a loan <span>＋</span></button>}</div>
         {flash && <p className="message success" role="status">{flash}<button className="dismiss" onClick={() => setFlash('')} aria-label="Dismiss">×</button></p>}
-        <Workspace active={active} onAction={setPendingAction} />
+        <Workspace active={active} onAction={setPendingAction} demoMode={demoMode} />
       </div>
     </main>
     <nav className="mobile-nav" aria-label="Main navigation">{nav.map((item) => <button key={item} className={active === item ? 'selected' : ''} onClick={() => setActive(item)}>{item}</button>)}</nav>
-    {pendingAction && <ActionDialog action={pendingAction} close={() => setPendingAction(null)} done={(message) => { setPendingAction(null); setFlash(message); }} />}
+    {pendingAction && <ActionDialog action={pendingAction} close={() => setPendingAction(null)} done={(message) => { setPendingAction(null); setFlash(message); window.dispatchEvent(new Event('bmoni:data-changed')); }} />}
   </div>;
 }
 
@@ -162,7 +278,7 @@ const descriptions = {
   'BMONI sandbox': 'A separate sandbox for BMONI account activity; it is not the peer-lending ledger.',
 };
 
-function Workspace({ active, onAction }) {
+function Workspace({ active, onAction, demoMode }) {
   const paths = useMemo(() => ROUTES[active], [active]);
   const result = usePanelData(paths, active !== 'Advisory');
   if (active === 'Advisory') return <Advisory />;
@@ -172,9 +288,11 @@ function Workspace({ active, onAction }) {
     {active === 'Overview' && <div className="callout"><span className="callout-icon">i</span><p><strong>Simulated activity</strong><br />Balances, transactions, loans and repayments are demo records. They do not represent real cash.</p></div>}
     {active === 'Approvals' && <p className="disclosure">Confirm or reject only after reviewing the amount, action and recipient returned for each approval.</p>}
     {active === 'BMONI sandbox' && <p className="disclosure">Sandbox activity is separate from the simulated peer-lending ledger. Never enter a real BVN or upload real identity documents in this demo.</p>}
+    {active === 'BMONI sandbox' && demoMode && <div className="sandbox-tools"><p><strong>Sandbox tools</strong><br />Try a simulated transfer to see how sandbox activity is kept separate from peer lending.</p><button className="button outline" onClick={() => onAction({ type: 'sandbox-transfer' })}>Try a demo transfer</button></div>}
     {active === 'Marketplace' && <p className="disclosure">Review the API-provided loan terms carefully. A score or assessment is not a guarantee of repayment.</p>}
     {result.data.length > 0 ? result.data.map(({ path, data }) => <section className="data-section" key={path}><div className="section-title"><h2>{pathLabel(path)}</h2><span className="data-source">Connected API</span></div><RecordView data={data} title={pathLabel(path)} />
       {active === 'Marketplace' && Array.isArray(data) && data.map((loan, index) => { const id = loan?.id || loan?.loanId; return id ? <div className="approval-actions" key={id}><span>Support this simulated loan request</span><button className="button primary" onClick={() => onAction({ type: 'contribute', loanId: id, item: loan })}>Review contribution</button></div> : null; })}
+      {active === 'Loans' && Array.isArray(data) && data.map((loan, index) => { const id = loan?.id || loan?.loanId; return id ? <LoanActions key={id} loan={loan} onAction={onAction} /> : null; })}
       {active === 'Approvals' && Array.isArray(data) && data.map((item, index) => <ApprovalActions key={item.id || item.approvalId || index} item={item} onAction={onAction} />)}
     </section>) : !result.error ? <Empty text="No API data is available for this view yet. Connect the backend and retry." /> : null}
     {active === 'Loans' && <div className="inline-actions"><button className="button outline" onClick={() => onAction({ type: 'create-loan' })}>Request a loan</button></div>}
@@ -186,8 +304,10 @@ function pathLabel(path) { const clean = path.split('?')[0]; if (clean.includes(
 
 function ApprovalActions({ item, onAction }) { const id = item?.id || item?.approvalId; if (!id) return null; return <div className="approval-actions"><span>Review this simulated request</span><button className="button outline" onClick={() => onAction({ type: 'reject', id })}>Reject</button><button className="button primary" onClick={() => onAction({ type: 'confirm', id, item })}>Review & confirm</button></div>; }
 
+function LoanActions({ loan, onAction }) { const id = loan?.id || loan?.loanId; const canRepay = !/open|pending/i.test(String(loan?.status || '')); return <div className="loan-actions"><button className="button outline" onClick={() => onAction({ type: 'schedule', loanId: id })}>View repayment schedule</button>{canRepay && <button className="button outline" onClick={() => onAction({ type: 'repayment', loanId: id })}>Request simulated repayment</button>}</div>; }
+
 function ActionDialog({ action, close, done }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [amount, setAmount] = useState(''); const [purpose, setPurpose] = useState(''); const [ack, setAck] = useState(false);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [amount, setAmount] = useState(''); const [purpose, setPurpose] = useState(''); const [recipient, setRecipient] = useState(''); const [ack, setAck] = useState(false); const [detailResult, setDetailResult] = useState(null);
   const dialogRef = useRef(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   useEffect(() => { dialogRef.current?.focus(); const handleKey = (event) => { if (event.key === 'Escape') close(); }; window.addEventListener('keydown', handleKey); return () => window.removeEventListener('keydown', handleKey); }, [close]);
@@ -198,15 +318,19 @@ function ActionDialog({ action, close, done }) {
       let path; let body = {}; let method = 'POST';
       if (action.type === 'create-loan') { path = '/api/loans'; body = { amount: Number(amount), purpose }; }
       if (action.type === 'contribute') { path = `/api/loans/${encodeURIComponent(action.loanId)}/contributions`; body = { amount: Number(amount), acceptedTerms: ack }; }
+      if (action.type === 'repayment') { path = `/api/loans/${encodeURIComponent(action.loanId)}/repayments`; body = { amount: Number(amount) }; }
+      if (action.type === 'sandbox-transfer') { path = '/api/bmoni/transfers'; body = { amount: Number(amount), recipient }; }
       if (action.type === 'confirm' || action.type === 'reject') { path = `/api/approvals/${encodeURIComponent(action.id)}/${action.type}`; body = {}; }
-      await api(path, { method, body: Object.keys(body).length ? body : undefined, idempotencyKey: action.type === 'confirm' || action.type === 'contribute' ? idempotencyKey.current : undefined });
+      if (action.type === 'schedule') { setDetailResult(await api(`/api/loans/${encodeURIComponent(action.loanId)}/schedule`)); setBusy(false); return; }
+      await api(path, { method, body: Object.keys(body).length ? body : undefined, idempotencyKey: ['confirm', 'contribute', 'repayment', 'sandbox-transfer'].includes(action.type) ? idempotencyKey.current : undefined });
       done(action.type === 'confirm' ? 'Approval confirmed. The API accepted the action.' : action.type === 'reject' ? 'Approval rejected.' : action.type === 'contribute' ? 'Contribution sent to the API.' : 'Loan request sent to the API.');
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   }
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && close()}><section ref={dialogRef} tabIndex={-1} className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><button className="dialog-close" onClick={close} aria-label="Close">×</button><p className="eyebrow">SIMULATED ACTIVITY</p><h2 id="dialog-title">{action.type === 'create-loan' ? 'Request a loan' : action.type === 'contribute' ? 'Contribute to a loan' : `${action.type === 'confirm' ? 'Confirm' : 'Reject'} approval`}</h2>
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && close()}><section ref={dialogRef} tabIndex={-1} className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><button className="dialog-close" onClick={close} aria-label="Close">×</button><p className="eyebrow">SIMULATED ACTIVITY</p><h2 id="dialog-title">{action.type === 'create-loan' ? 'Request a loan' : action.type === 'contribute' ? 'Contribute to a loan' : action.type === 'repayment' ? 'Request a repayment' : action.type === 'sandbox-transfer' ? 'Sandbox transfer' : action.type === 'schedule' ? 'Repayment schedule' : `${action.type === 'confirm' ? 'Confirm' : 'Reject'} approval`}</h2>
     {destructive && <div className="confirmation-detail"><strong>{action.type === 'confirm' ? 'Confirm this simulated action?' : 'Reject this simulated action?'}</strong><p>{action.item ? Object.entries(action.item).filter(([key]) => !/password|secret|token|key/i.test(key)).slice(0, 5).map(([key, value]) => `${formatLabel(key)}: ${safeValue(value, key)}`).join(' · ') : 'Review the pending approval details before continuing.'}</p><p>No real money will move through this demo.</p></div>}
-    {(action.type === 'create-loan' || action.type === 'contribute') && <form className="form" onSubmit={submit}><label>Amount (NGN)<input type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>{action.type === 'create-loan' && <label>Purpose<input required maxLength="180" value={purpose} onChange={(e) => setPurpose(e.target.value)} /></label>}<label className="checkbox-row"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} required />{action.type === 'create-loan' ? 'I understand this is a simulated request.' : 'I reviewed the loan terms and understand returns are not guaranteed.'}</label>{error && <p className="message error" role="alert">{error}</p>}<button className="button primary wide" disabled={!ack || busy}>{busy ? 'Sending…' : action.type === 'create-loan' ? 'Send simulated request' : 'Confirm simulated contribution'}</button></form>}
+    {(action.type === 'create-loan' || action.type === 'contribute' || action.type === 'repayment' || action.type === 'sandbox-transfer') && <form className="form" onSubmit={submit}><label>Amount (NGN)<input type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>{action.type === 'create-loan' && <label>Purpose<input required maxLength="180" value={purpose} onChange={(e) => setPurpose(e.target.value)} /></label>}{action.type === 'sandbox-transfer' && <label>Demo recipient<input required maxLength="80" value={recipient} onChange={(e) => setRecipient(e.target.value)} /></label>}{action.type !== 'repayment' && <label className="checkbox-row"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} required />{action.type === 'create-loan' ? 'I understand this is a simulated request.' : action.type === 'contribute' ? 'I reviewed the loan terms and understand returns are not guaranteed.' : 'I understand this stays within the BMONI sandbox.'}</label>}{action.type === 'repayment' && <p className="muted">This creates a simulated repayment request for approval. No funds move now.</p>}{error && <p className="message error" role="alert">{error}</p>}<button className="button primary wide" disabled={busy || (action.type !== 'repayment' && !ack)}>{busy ? 'Sending…' : action.type === 'create-loan' ? 'Send simulated request' : action.type === 'contribute' ? 'Confirm simulated contribution' : action.type === 'repayment' ? 'Request approval' : 'Run simulated transfer'}</button></form>}
+    {detailResult && <div className="advisory-result"><RecordView data={detailResult} title="Simulated repayment schedule" /></div>}
     {destructive && <form onSubmit={submit}>{error && <p className="message error" role="alert">{error}</p>}<div className="dialog-actions"><button type="button" className="button outline" onClick={close}>Go back</button><button className="button primary" disabled={busy}>{busy ? 'Processing…' : `Confirm ${action.type}`}</button></div></form>}
     <button type="button" className="text-button" onClick={close}>Cancel</button></section></div>;
 }

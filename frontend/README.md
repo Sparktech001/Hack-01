@@ -12,6 +12,15 @@ npm run dev
 
 Set `VITE_API_BASE_URL` to the backend origin, for example `https://localhost:7001`. The frontend appends the documented `/api/...` paths itself. Do not put API keys, signing secrets, or other backend credentials in a `VITE_` variable.
 
+## Demo mode
+
+The compact **Demo On/Off** switch is available in the sign-in view, sidebar, and mobile header. Turn it on to enter the app without an API and demonstrate seeded simulated loans, NGN wallet and transaction data, approvals, advisory tools, repayment schedules, contributions, and separate BMONI sandbox activity. Demo actions are saved locally in the browser and do not contact the backend or move real money.
+
+- `VITE_DEMO_MODE_ENABLED=true` exposes the switch (default when unset); set it to `false` to disable demo access.
+- `VITE_DEMO_MODE_DEFAULT=true` starts each new browser session in demo mode; default is `false`.
+
+These are Vite build-time variables. Change them in Render's environment settings and redeploy for the setting to take effect.
+
 ## Checks
 
 ```bash
