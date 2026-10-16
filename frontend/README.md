@@ -1,6 +1,6 @@
-# B Moni frontend
+# LMoni frontend
 
-A React and Vite interface for the B Moni API and BMONI sandbox. Peer-lending balances, deposits, contributions, transfers and repayments are sandbox or simulated activity; they do not represent real cash.
+A React and Vite interface for the LMoni API and BMONI sandbox. Peer-lending balances, deposits, contributions, transfers and repayments are sandbox or simulated activity; they do not represent real cash.
 
 ## Run locally
 

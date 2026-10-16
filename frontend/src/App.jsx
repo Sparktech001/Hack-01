@@ -34,7 +34,7 @@ function initialDemoState() {
       { id: 'demo-tx-302', title: 'Simulated repayment', type: 'repayment', amount: 9500, status: 'Completed', createdAt: '2026-10-12T09:15:00Z' },
       { id: 'demo-tx-303', title: 'Simulated allowance', type: 'credit', amount: 30000, status: 'Completed', createdAt: '2026-10-08T12:00:00Z' },
     ],
-    approvals: [{ id: 'demo-approval-401', action: 'Repayment request', amount: 9500, recipient: 'B Moni student loan', status: 'Pending' }],
+    approvals: [{ id: 'demo-approval-401', action: 'Repayment request', amount: 9500, recipient: 'LMoni student loan', status: 'Pending' }],
     returns: [{ id: 'demo-return-501', loanId: 'demo-loan-203', principal: 25000, expectedReturn: 26250, status: 'Simulated' }],
     sandbox: { balances: [{ account: 'BMONI Sandbox NGN', balance: 150000, currency: 'NGN', environment: 'Sandbox' }], transactions: [{ id: 'demo-sandbox-601', type: 'Sandbox credit', amount: 150000, status: 'Simulated', createdAt: '2026-10-01T08:00:00Z' }] },
     schedules: { 'demo-loan-203': [{ installment: 1, dueDate: '2026-10-28T00:00:00Z', amount: 19500, status: 'Upcoming' }, { installment: 2, dueDate: '2026-11-28T00:00:00Z', amount: 19500, status: 'Upcoming' }] },
@@ -81,7 +81,7 @@ async function demoRequest(path, { method = 'GET', body } = {}) {
   }
   const repayment = path.match(/^\/api\/loans\/([^/]+)\/repayments$/);
   if (repayment && method === 'POST') {
-    state.approvals.unshift({ id: `demo-approval-${Date.now()}`, action: 'Repayment request', loanId: decodeURIComponent(repayment[1]), amount: Number(body?.amount || 0), recipient: 'B Moni student loan', status: 'Pending' });
+    state.approvals.unshift({ id: `demo-approval-${Date.now()}`, action: 'Repayment request', loanId: decodeURIComponent(repayment[1]), amount: Number(body?.amount || 0), recipient: 'LMoni student loan', status: 'Pending' });
     writeDemoState(state); return { success: true, status: 'Pending approval', simulated: true };
   }
   const approval = path.match(/^\/api\/approvals\/([^/]+)\/(confirm|reject)$/);
@@ -123,7 +123,7 @@ async function api(path, { method = 'GET', body, formData, idempotencyKey, force
       body: formData || (body ? JSON.stringify(body) : undefined),
     });
   } catch {
-    throw new Error('Could not reach the B Moni API. Check the API URL and your connection, then retry.');
+    throw new Error('Could not reach the LMoni API. Check the API URL and your connection, then retry.');
   }
   const contentType = response.headers.get('content-type') || '';
   const data = contentType.includes('json') ? await response.json().catch(() => null) : await response.text().catch(() => '');
@@ -220,7 +220,7 @@ function Login({ onLogin, onToggleDemo, demoMode }) {
   }
   return <main className="login-wrap"><DemoToggle className="login-demo-toggle" active={demoMode} onToggle={onToggleDemo} /><section className="login-card">
     <Brand /><div className="environment"><span />Demo environment</div>
-    <p className="eyebrow">STUDENT FINANCE, TOGETHER</p><h1>{registering ? 'Create your account.' : 'Good to have you here.'}</h1><p className="muted">{registering ? 'Choose how you want to use the B Moni sandbox.' : 'Sign in to manage your simulated student finance activity.'}</p>
+    <p className="eyebrow">STUDENT FINANCE, TOGETHER</p><h1>{registering ? 'Create your account.' : 'Good to have you here.'}</h1><p className="muted">{registering ? 'Choose how you want to use the LMoni sandbox.' : 'Sign in to manage your simulated student finance activity.'}</p>
     <form onSubmit={submit} className="form">
       {!registering && options.length > 0 && <label>Demo account<select value={email} onChange={(e) => { const selected = options.find((account) => (account.email || account.emailAddress) === e.target.value); setEmail(e.target.value); if (selected?.password) setPassword(selected.password); }}><option value="">Choose an account</option>{options.map((option) => <option key={option.email || option.emailAddress} value={option.email || option.emailAddress}>{option.firstName || option.name || 'Demo user'} · {option.email || option.emailAddress}</option>)}</select></label>}
       {registering && <label>First name<input autoComplete="given-name" required maxLength="80" value={firstName} onChange={(e) => setFirstName(e.target.value)} /></label>}
@@ -230,12 +230,12 @@ function Login({ onLogin, onToggleDemo, demoMode }) {
       {error && <p className="message error" role="alert">{error}</p>}{notice && <p className="message success" role="status">{notice}</p>}
       <button className="button primary wide" disabled={busy}>{busy ? (registering ? 'Creating account…' : 'Signing in…') : (registering ? 'Create account' : 'Sign in')}</button>
     </form>
-    <p className="login-foot">{registering ? 'Already registered?' : 'New to B Moni?'} <button className="text-button" type="button" onClick={() => { setRegistering(!registering); setError(''); }}>{registering ? 'Sign in' : 'Create an account'}</button></p>
+    <p className="login-foot">{registering ? 'Already registered?' : 'New to LMoni?'} <button className="text-button" type="button" onClick={() => { setRegistering(!registering); setError(''); }}>{registering ? 'Sign in' : 'Create an account'}</button></p>
     <p className="login-foot">This demo does not move real money. Demo credentials are provided by the connected API.</p>
   </section></main>;
 }
 
-function Brand() { return <a className="brand" href="#overview" aria-label="B Moni home"><span className="brand-symbol">b</span><span>B Moni</span></a>; }
+function Brand() { return <a className="brand" href="#overview" aria-label="LMoni home"><span className="brand-symbol">l</span><span>LMoni</span></a>; }
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('bmoni_token'));
@@ -405,7 +405,7 @@ function Advisory() {
         </div>
       </>}
       {error && <div className="message error" role="alert">{error}<button className="button outline" type="button" onClick={submit}>Retry</button></div>}
-      <button className="button primary" disabled={busy || !input.trim()}>{busy ? (mode === 'scam-check' ? 'Checking…' : 'Thinking…') : mode === 'scam-check' ? 'Check message' : 'Ask B Moni'}</button>
+      <button className="button primary" disabled={busy || !input.trim()}>{busy ? (mode === 'scam-check' ? 'Checking…' : 'Thinking…') : mode === 'scam-check' ? 'Check message' : 'Ask LMoni'}</button>
     </form>
     {result && mode === 'scam-check' && <section className={`scam-result risk-${String(result.riskLevel || 'unknown').toLowerCase()}`} aria-live="polite">
       <div className="scam-result__top"><div><p className="eyebrow">SCAM CHECK</p><h3>{String(result.riskLevel || 'Assessment').toUpperCase()} RISK</h3></div><span>{result.isAiGenerated ? 'AI assisted' : 'Rule based'}{result.isSimulated ? ' · Sandbox' : ''}</span></div>

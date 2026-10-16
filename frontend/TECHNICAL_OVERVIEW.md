@@ -1,12 +1,12 @@
-# B Moni Technical Overview
+# LMoni Technical Overview
 
-This document explains the current B Moni student-finance application: what users can do, how the frontend and backend are connected, the main technologies, and how the sandbox and deployment configuration work.
+This document explains the current LMoni student-finance application: what users can do, how the frontend and backend are connected, the main technologies, and how the sandbox and deployment configuration work.
 
 ## 1. Product and system overview
 
-B Moni is a student-finance demo with two distinct money environments:
+LMoni is a student-finance demo with two distinct money environments:
 
-1. **Peer-lending platform ledger:** simulated wallet funds, loan contributions, repayments, approvals, and returns stored by the B Moni API.
+1. **Peer-lending platform ledger:** simulated wallet funds, loan contributions, repayments, approvals, and returns stored by the LMoni API.
 2. **BMONI embedded sandbox:** partner-side user onboarding, KYC, smart-wallet and bank-account operations, balances, and sandbox transfers.
 
 These environments are separate. A simulated peer-lending credit is not a real deposit, and BMONI sandbox activity is not the peer-lending ledger.

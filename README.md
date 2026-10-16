@@ -1,6 +1,6 @@
-# B Moni
+# LMoni
 
-B Moni is a responsive frontend for a Nigerian student microfinance and peer-lending demo. The application separates BMONI sandbox activity from the peer-lending demo ledger and labels returned financial activity as simulated.
+LMoni is a responsive frontend for a Nigerian student microfinance and peer-lending demo. The application separates BMONI sandbox activity from the peer-lending demo ledger and labels returned financial activity as simulated.
 
 ## Frontend
 
