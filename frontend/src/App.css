@@ -171,3 +171,16 @@ h1,h2,h3 { font-family: var(--display); color: var(--ink); }
 .pagination-controls { justify-content: flex-end; margin-top: 16px; color: var(--muted); font-size: 12px; }
 .activity-tools .section-title .button { flex: none; }
 @media (max-width: 680px) { .activity-filter-actions { grid-column: 1; } .pagination-controls { justify-content: space-between; } }
+.advisory-fields { margin: 2px 0 8px; }
+.scam-result { margin-top: 20px; padding: 18px; border: 1px solid var(--line); border-left: 4px solid #93a18e; border-radius: var(--radius-md); background: #f8faf7; }
+.scam-result.risk-high { border-left-color: #b84c45; background: #fff5f2; }
+.scam-result.risk-medium { border-left-color: #d3902f; background: #fffaf0; }
+.scam-result.risk-low { border-left-color: #60946b; background: #f3faf3; }
+.scam-result__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.scam-result__top .eyebrow,.scam-result__top h3 { margin: 0; }
+.scam-result__top h3 { font-size: 18px; }
+.scam-result__top>span { color: var(--muted); font-size: 11px; }
+.scam-result__action { margin: 12px 0; font-weight: 600; }
+.scam-result ul { display: grid; gap: 8px; padding-left: 20px; }
+.scam-result li { line-height: 1.5; }
+.scam-result__disclaimer { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.5; }

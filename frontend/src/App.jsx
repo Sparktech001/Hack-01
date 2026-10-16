@@ -363,9 +363,58 @@ function ActionDialog({ action, close, done }) {
 }
 
 function Advisory() {
-  const [mode, setMode] = useState('scam-check'); const [input, setInput] = useState(''); const [result, setResult] = useState(null); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
-  async function submit(event) { event.preventDefault(); setBusy(true); setError(''); setResult(null); try { setResult(await api(mode === 'scam-check' ? '/api/scam-check' : '/api/assistant/chat', { method: 'POST', body: mode === 'scam-check' ? { message: input } : { question: input } })); } catch (err) { setError(err.message); } finally { setBusy(false); } }
-  return <section className="advisory-box"><div className="advisory-icon">✳</div><h2>Guidance for your next step</h2><p className="muted">This tool offers general advice only. It cannot approve, initiate or authorize payments.</p><div className="segmented"><button className={mode === 'scam-check' ? 'active' : ''} onClick={() => setMode('scam-check')}>Check a message</button><button className={mode === 'chat' ? 'active' : ''} onClick={() => setMode('chat')}>Ask a question</button></div><form className="form" onSubmit={submit}><label>{mode === 'scam-check' ? 'Paste a message you want to check' : 'What would you like help with?'}<textarea rows="4" required maxLength="2000" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Do not include passwords, BVN or account secrets." /></label>{error && <div className="message error" role="alert">{error}<button className="button outline" type="button" onClick={submit}>Retry</button></div>}<button className="button primary" disabled={busy || !input.trim()}>{busy ? 'Checking…' : mode === 'scam-check' ? 'Check message' : 'Ask B Moni'}</button></form>{result && <div className="advisory-result"><h3>Advisory response</h3><RecordView data={result} title="Advisory" /></div>}</section>;
-}
+  const [mode, setMode] = useState('scam-check');
+  const [input, setInput] = useState('');
+  const [bankCode, setBankCode] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [expectedAccountName, setExpectedAccountName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
+  async function submit(event) {
+    event.preventDefault();
+    if (mode === 'scam-check' && Boolean(bankCode.trim()) !== Boolean(accountNumber.trim())) {
+      setError('Enter both a bank code and account number, or leave both blank.');
+      return;
+    }
+    setBusy(true); setError(''); setResult(null);
+    try {
+      const body = mode === 'scam-check'
+        ? { message: input, bankCode: bankCode.trim() || null, accountNumber: accountNumber.trim() || null, expectedAccountName: expectedAccountName.trim() || null, amount: amount === '' ? null : Number(amount) }
+        : { question: input };
+      setResult(await api(mode === 'scam-check' ? '/api/scam-check' : '/api/assistant/chat', { method: 'POST', body }));
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+
+  return <section className="advisory-box">
+    <div className="advisory-icon">✳</div><h2>Guidance for your next step</h2>
+    <p className="muted">This tool offers general advice only. It cannot approve, initiate or authorize payments.</p>
+    <div className="segmented"><button type="button" className={mode === 'scam-check' ? 'active' : ''} onClick={() => { setMode('scam-check'); setResult(null); setError(''); }}>Check a message</button><button type="button" className={mode === 'chat' ? 'active' : ''} onClick={() => { setMode('chat'); setResult(null); setError(''); }}>Ask a question</button></div>
+    <form className="form" onSubmit={submit}>
+      <label>{mode === 'scam-check' ? 'Paste a message you want to check' : 'What would you like help with?'}<textarea rows="4" required maxLength={mode === 'scam-check' ? 5000 : 2000} value={input} onChange={(e) => setInput(e.target.value)} placeholder="Do not include passwords, BVN or account secrets." /></label>
+      {mode === 'scam-check' && <>
+        <p className="muted small">Optional: check a recipient account and payment amount. Use sandbox details only.</p>
+        <div className="backend-grid advisory-fields">
+          <label className="backend-field">Bank code<input inputMode="numeric" maxLength={20} value={bankCode} onChange={(e) => setBankCode(e.target.value)} placeholder="Bank code" /></label>
+          <label className="backend-field">Account number<input inputMode="numeric" maxLength={20} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Account number" /></label>
+          <label className="backend-field">Expected account name<input maxLength={120} value={expectedAccountName} onChange={(e) => setExpectedAccountName(e.target.value)} placeholder="Name you were given" /></label>
+          <label className="backend-field">Amount (NGN)<input type="number" min="0" max="10000000" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Optional" /></label>
+        </div>
+      </>}
+      {error && <div className="message error" role="alert">{error}<button className="button outline" type="button" onClick={submit}>Retry</button></div>}
+      <button className="button primary" disabled={busy || !input.trim()}>{busy ? (mode === 'scam-check' ? 'Checking…' : 'Thinking…') : mode === 'scam-check' ? 'Check message' : 'Ask B Moni'}</button>
+    </form>
+    {result && mode === 'scam-check' && <section className={`scam-result risk-${String(result.riskLevel || 'unknown').toLowerCase()}`} aria-live="polite">
+      <div className="scam-result__top"><div><p className="eyebrow">SCAM CHECK</p><h3>{String(result.riskLevel || 'Assessment').toUpperCase()} RISK</h3></div><span>{result.isAiGenerated ? 'AI assisted' : 'Rule based'}{result.isSimulated ? ' · Sandbox' : ''}</span></div>
+      <p className="scam-result__action">{result.recommendedAction || 'Review the details carefully.'}</p>
+      {result.verifiedAccountName && <p><strong>Verified account name:</strong> {result.verifiedAccountName}</p>}
+      {Array.isArray(result.reasons) && result.reasons.length > 0 && <ul>{result.reasons.map((reason, index) => <li key={`${reason.type}-${index}`}><strong>{reason.type?.replaceAll('_', ' ') || 'Warning'}:</strong> {reason.text}</li>)}</ul>}
+      {result.disclaimer && <p className="scam-result__disclaimer">{result.disclaimer}</p>}
+    </section>}
+    {result && mode === 'chat' && <div className="advisory-result"><h3>Advisory response</h3><p>{result.answer || 'No answer was returned.'}</p><p className="muted small">{result.isSimulated ? 'Uses simulated account data.' : ''}</p></div>}
+  </section>;
+}
 export default App;
