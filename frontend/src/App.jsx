@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityTools } from './components/ActivityTools.jsx';
+import { BmoniTools } from './components/BmoniTools.jsx';
+import { WalletTools } from './components/WalletTools.jsx';
 import './App.css';
 
 const ROUTES = {
-  Overview: ['/api/dashboard', '/api/wallet', '/api/score', '/api/transactions', '/api/approvals/pending'],
+  Overview: ['/api/health', '/api/bootstrap', '/api/dashboard', '/api/wallet', '/api/score', '/api/transactions', '/api/approvals/pending'],
+  Wallet: ['/api/wallet'],
   Loans: ['/api/loans'],
-  Marketplace: ['/api/loans?role=open', '/api/lender/returns'],
-  Activity: ['/api/transactions', '/api/wallet'],
+  Marketplace: ['/api/loans?role=open'],
+  Activity: [],
   Approvals: ['/api/approvals/pending'],
   Advisory: [],
-  'BMONI sandbox': ['/api/bmoni/balances', '/api/bmoni/transactions'],
+  'BMONI sandbox': [],
 };
 
-// The switch is available by default. Set VITE_DEMO_MODE_ENABLED=false at build
-// time to remove simulated access from a deployed build.
-const DEMO_MODE_ENABLED = import.meta.env.VITE_DEMO_MODE_ENABLED !== 'false';
+// Demo mode is disabled by default. Enable it only for a demo build.
+const DEMO_MODE_ENABLED = import.meta.env.VITE_DEMO_MODE_ENABLED === 'true';
 const DEMO_MODE_DEFAULT = import.meta.env.VITE_DEMO_MODE_DEFAULT === 'true';
 let demoModeActive = false;
 
@@ -104,10 +107,9 @@ function apiRoot() {
   return (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '').replace(/\/api$/i, '');
 }
 
-async function api(path, { method = 'GET', body, formData, idempotencyKey } = {}) {
-  if (demoModeActive) return demoRequest(path, { method, body });
+async function api(path, { method = 'GET', body, formData, idempotencyKey, forceLive = false } = {}) {
+  if (demoModeActive && !forceLive) return demoRequest(path, { method, body });
   const root = apiRoot();
-  if (!root) throw new Error('Set VITE_API_BASE_URL to connect to the B Moni API. No demo data is being shown.');
   const token = localStorage.getItem('bmoni_token');
   const headers = new Headers();
   if (token) headers.set('Authorization', `Bearer ${token}`);
@@ -192,18 +194,21 @@ function DemoToggle({ active, onToggle, className = '' }) {
 function Login({ onLogin, onToggleDemo, demoMode }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [roles, setRoles] = useState('1');
+  const [registering, setRegistering] = useState(false);
   const [options, setOptions] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   useEffect(() => { api('/api/bootstrap').then((data) => {
     const accounts = data?.accounts || data?.demoAccounts || [];
-    setOptions(Array.isArray(accounts) ? accounts.map((account) => account.email || account.emailAddress).filter(Boolean) : []);
+    setOptions(Array.isArray(accounts) ? accounts.filter((account) => account.email || account.emailAddress) : []);
   }).catch(() => {}); }, []);
   async function submit(event) {
     event.preventDefault(); setError(''); setNotice(''); setBusy(true);
     try {
-      const result = await api('/api/auth/login', { method: 'POST', body: { email, password } });
+      const result = await api(registering ? '/api/auth/register' : '/api/auth/login', { method: 'POST', body: registering ? { email, firstName, password, roles: Number(roles) } : { email, password } });
       const token = result?.token || result?.accessToken || result?.access_token;
       if (!token) throw new Error('The API did not return a session token. Check the login response contract.');
       localStorage.setItem('bmoni_token', token);
@@ -215,14 +220,17 @@ function Login({ onLogin, onToggleDemo, demoMode }) {
   }
   return <main className="login-wrap"><DemoToggle className="login-demo-toggle" active={demoMode} onToggle={onToggleDemo} /><section className="login-card">
     <Brand /><div className="environment"><span />Demo environment</div>
-    <p className="eyebrow">STUDENT FINANCE, TOGETHER</p><h1>Good to have you here.</h1><p className="muted">Sign in to manage your simulated student finance activity.</p>
+    <p className="eyebrow">STUDENT FINANCE, TOGETHER</p><h1>{registering ? 'Create your account.' : 'Good to have you here.'}</h1><p className="muted">{registering ? 'Choose how you want to use the B Moni sandbox.' : 'Sign in to manage your simulated student finance activity.'}</p>
     <form onSubmit={submit} className="form">
-      {options.length > 0 && <label>Demo account<select value={email} onChange={(e) => setEmail(e.target.value)}><option value="">Choose an account</option>{options.map((option) => <option key={option}>{option}</option>)}</select></label>}
+      {!registering && options.length > 0 && <label>Demo account<select value={email} onChange={(e) => { const selected = options.find((account) => (account.email || account.emailAddress) === e.target.value); setEmail(e.target.value); if (selected?.password) setPassword(selected.password); }}><option value="">Choose an account</option>{options.map((option) => <option key={option.email || option.emailAddress} value={option.email || option.emailAddress}>{option.firstName || option.name || 'Demo user'} · {option.email || option.emailAddress}</option>)}</select></label>}
+      {registering && <label>First name<input autoComplete="given-name" required maxLength="80" value={firstName} onChange={(e) => setFirstName(e.target.value)} /></label>}
       <label>Email address<input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@university.edu.ng" /></label>
-      <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+      <label>Password<input type="password" autoComplete={registering ? 'new-password' : 'current-password'} minLength={registering ? 10 : undefined} maxLength="128" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+      {registering && <label>Account role<select value={roles} onChange={(e) => setRoles(e.target.value)}><option value="1">Borrower</option><option value="2">Lender</option><option value="3">Borrower and lender</option></select></label>}
       {error && <p className="message error" role="alert">{error}</p>}{notice && <p className="message success" role="status">{notice}</p>}
-      <button className="button primary wide" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+      <button className="button primary wide" disabled={busy}>{busy ? (registering ? 'Creating account…' : 'Signing in…') : (registering ? 'Create account' : 'Sign in')}</button>
     </form>
+    <p className="login-foot">{registering ? 'Already registered?' : 'New to B Moni?'} <button className="text-button" type="button" onClick={() => { setRegistering(!registering); setError(''); }}>{registering ? 'Sign in' : 'Create an account'}</button></p>
     <p className="login-foot">This demo does not move real money. Demo credentials are provided by the connected API.</p>
   </section></main>;
 }
@@ -257,11 +265,11 @@ function App() {
   }
   if (!token && !demoMode) return <Login demoMode={demoMode} onToggleDemo={toggleDemo} onLogin={(profile) => { setToken(localStorage.getItem('bmoni_token')); setUser(profile); setActive('Overview'); }} />;
   return <div className="app-shell">
-    <aside className="sidebar"><Brand /><p className="nav-label">YOUR FINANCES</p><nav aria-label="Main navigation">{nav.map((item, index) => <button key={item} className={`nav-item ${active === item ? 'selected' : ''}`} onClick={() => setActive(item)}><span className="nav-icon">{['◫', '↗', '◎', '↔', '✓', '✳', '▦'][index]}</span>{item}</button>)}</nav><div className="sidebar-bottom"><div className="demo-note"><span className="dot" />{demoMode ? 'Demo mode is on' : 'Demo environment'}<p>{demoMode ? 'Actions and money values are simulated.' : 'Activity and balances shown here are simulated.'}</p></div><DemoToggle active={demoMode} onToggle={toggleDemo} /><button className="nav-item logout" onClick={() => { localStorage.removeItem('bmoni_token'); localStorage.removeItem('bmoni_user'); setToken(null); setUser(null); }}>↗ <span>Sign out</span></button></div></aside>
+    <aside className="sidebar"><Brand /><p className="nav-label">YOUR FINANCES</p><nav aria-label="Main navigation">{nav.map((item, index) => <button key={item} className={`nav-item ${active === item ? 'selected' : ''}`} onClick={() => setActive(item)}><span className="nav-icon">{['◫', '◉', '↗', '◎', '↔', '✓', '✳', '▦'][index]}</span>{item}</button>)}</nav><div className="sidebar-bottom"><div className="demo-note"><span className="dot" />{demoMode ? 'Demo mode is on' : 'Demo environment'}<p>{demoMode ? 'Actions and money values are simulated.' : 'Activity and balances shown here are simulated.'}</p></div><DemoToggle active={demoMode} onToggle={toggleDemo} /><button className="nav-item logout" onClick={() => { localStorage.removeItem('bmoni_token'); localStorage.removeItem('bmoni_user'); setToken(null); setUser(null); }}>↗ <span>Sign out</span></button></div></aside>
     <main className="main-area"><header className="topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-right"><DemoToggle active={demoMode} onToggle={toggleDemo} /><span className="environment"><span />{demoMode ? 'Demo mode' : 'Demo environment'}</span><span className="avatar">{(user?.firstName || user?.name || user?.fullName || 'S').slice(0, 1).toUpperCase()}</span></div></header>
-      <div className="page-content"><div className="page-heading"><div><p className="eyebrow">B MONI · STUDENT FINANCE</p><h1>{active === 'Overview' ? 'Your money, in view.' : active}</h1><p className="muted">{active === 'Overview' ? 'A clear picture of your simulated activity.' : descriptions[active]}</p></div>{active === 'Loans' && <button className="button primary" onClick={() => setPendingAction({ type: 'create-loan' })}>Request a loan <span>＋</span></button>}</div>
+      <div className="page-content"><div className="page-heading"><div><p className="eyebrow">B MONI · STUDENT FINANCE</p><h1>{active === 'Overview' ? 'Your money, in view.' : active}</h1><p className="muted">{active === 'Overview' ? 'A clear picture of your simulated activity.' : descriptions[active]}</p></div>{active === 'Loans' && canBorrow(user) && <button className="button primary" onClick={() => setPendingAction({ type: 'create-loan' })}>Request a loan <span>＋</span></button>}</div>
         {flash && <p className="message success" role="status">{flash}<button className="dismiss" onClick={() => setFlash('')} aria-label="Dismiss">×</button></p>}
-        <Workspace active={active} onAction={setPendingAction} demoMode={demoMode} />
+        <Workspace active={active} onAction={setPendingAction} demoMode={demoMode} user={user} />
       </div>
     </main>
     <nav className="mobile-nav" aria-label="Main navigation">{nav.map((item) => <button key={item} className={active === item ? 'selected' : ''} onClick={() => setActive(item)}>{item}</button>)}</nav>
@@ -272,30 +280,36 @@ function App() {
 const descriptions = {
   Loans: 'Track requests and repayments. Every figure comes from the connected API.',
   Marketplace: 'Explore open requests from the student community.',
-  Activity: 'Review wallet activity returned by the API.',
+  Activity: 'Review wallet activity and lender returns returned by the API.',
   Approvals: 'Review the exact action and amount before confirming.',
   Advisory: 'Helpful guidance only. Advice never approves or initiates payments.',
   'BMONI sandbox': 'A separate sandbox for BMONI account activity; it is not the peer-lending ledger.',
 };
 
-function Workspace({ active, onAction, demoMode }) {
+function canLend(user) { return Boolean((Number(user?.roles ?? user?.role ?? 0) & 2) === 2 || String(user?.roles ?? user?.role ?? '').toLowerCase().includes('lender')); }
+function canBorrow(user) { return Boolean((Number(user?.roles ?? user?.role ?? 0) & 1) === 1 || String(user?.roles ?? user?.role ?? '').toLowerCase().includes('borrower')); }
+
+function Workspace({ active, onAction, demoMode, user }) {
+  const lender = canLend(user); const borrower = canBorrow(user);
   const paths = useMemo(() => ROUTES[active], [active]);
   const result = usePanelData(paths, active !== 'Advisory');
   if (active === 'Advisory') return <Advisory />;
+  if (active === 'Activity') return <ActivityTools api={api} canLend={lender} />;
+  if (active === 'BMONI sandbox') return <BmoniTools api={api} user={user} onDataChanged={() => window.dispatchEvent(new Event('bmoni:data-changed'))} />;
   if (result.loading) return <div className="skeleton-list" aria-label="Loading"><div /><div /><div /></div>;
   return <>
     {result.error && <div className="message error" role="alert"><span>{result.error}</span><button className="button outline" onClick={result.reload}>Retry</button></div>}
-    {active === 'Overview' && <div className="callout"><span className="callout-icon">i</span><p><strong>Simulated activity</strong><br />Balances, transactions, loans and repayments are demo records. They do not represent real cash.</p></div>}
+    {active === 'Overview' && <div className="callout"><span className="callout-icon">i</span><p><strong>Simulated activity</strong><br />Peer-loan balances and repayments are simulated. BMONI sandbox wallet activity is separate.</p></div>}
     {active === 'Approvals' && <p className="disclosure">Confirm or reject only after reviewing the amount, action and recipient returned for each approval.</p>}
     {active === 'BMONI sandbox' && <p className="disclosure">Sandbox activity is separate from the simulated peer-lending ledger. Never enter a real BVN or upload real identity documents in this demo.</p>}
     {active === 'BMONI sandbox' && demoMode && <div className="sandbox-tools"><p><strong>Sandbox tools</strong><br />Try a simulated transfer to see how sandbox activity is kept separate from peer lending.</p><button className="button outline" onClick={() => onAction({ type: 'sandbox-transfer' })}>Try a demo transfer</button></div>}
     {active === 'Marketplace' && <p className="disclosure">Review the API-provided loan terms carefully. A score or assessment is not a guarantee of repayment.</p>}
+    {active === 'Wallet' && <WalletTools api={api} onDataChanged={() => window.dispatchEvent(new Event('bmoni:data-changed'))} />}
     {result.data.length > 0 ? result.data.map(({ path, data }) => <section className="data-section" key={path}><div className="section-title"><h2>{pathLabel(path)}</h2><span className="data-source">Connected API</span></div><RecordView data={data} title={pathLabel(path)} />
-      {active === 'Marketplace' && Array.isArray(data) && data.map((loan, index) => { const id = loan?.id || loan?.loanId; return id ? <div className="approval-actions" key={id}><span>Support this simulated loan request</span><button className="button primary" onClick={() => onAction({ type: 'contribute', loanId: id, item: loan })}>Review contribution</button></div> : null; })}
-      {active === 'Loans' && Array.isArray(data) && data.map((loan, index) => { const id = loan?.id || loan?.loanId; return id ? <LoanActions key={id} loan={loan} onAction={onAction} /> : null; })}
+      {(active === 'Loans' || active === 'Marketplace') && Array.isArray(data) && data.map((loan, index) => { const id = loan?.id || loan?.loanId; return id ? <LoanActions key={id} loan={loan} onAction={onAction} active={active} lender={lender} borrower={borrower} /> : null; })}
       {active === 'Approvals' && Array.isArray(data) && data.map((item, index) => <ApprovalActions key={item.id || item.approvalId || index} item={item} onAction={onAction} />)}
     </section>) : !result.error ? <Empty text="No API data is available for this view yet. Connect the backend and retry." /> : null}
-    {active === 'Loans' && <div className="inline-actions"><button className="button outline" onClick={() => onAction({ type: 'create-loan' })}>Request a loan</button></div>}
+    {active === 'Loans' && borrower && <div className="inline-actions"><button className="button outline" onClick={() => onAction({ type: 'create-loan' })}>Request a loan</button></div>}
       {active === 'Overview' && <div className="next-step"><div><p className="eyebrow">A GOOD NEXT STEP</p><h2>Review open loan requests</h2><p className="muted">See the terms before choosing whether to participate.</p></div><button className="button primary" onClick={() => window.dispatchEvent(new CustomEvent('bmoni:navigate', { detail: 'Marketplace' }))}>Explore marketplace <span>→</span></button></div>}
   </>;
 }
@@ -304,40 +318,53 @@ function pathLabel(path) { const clean = path.split('?')[0]; if (clean.includes(
 
 function ApprovalActions({ item, onAction }) { const id = item?.id || item?.approvalId; if (!id) return null; return <div className="approval-actions"><span>Review this simulated request</span><button className="button outline" onClick={() => onAction({ type: 'reject', id })}>Reject</button><button className="button primary" onClick={() => onAction({ type: 'confirm', id, item })}>Review & confirm</button></div>; }
 
-function LoanActions({ loan, onAction }) { const id = loan?.id || loan?.loanId; const canRepay = !/open|pending/i.test(String(loan?.status || '')); return <div className="loan-actions"><button className="button outline" onClick={() => onAction({ type: 'schedule', loanId: id })}>View repayment schedule</button>{canRepay && <button className="button outline" onClick={() => onAction({ type: 'repayment', loanId: id })}>Request simulated repayment</button>}</div>; }
+function LoanActions({ loan, onAction, active, lender, borrower }) { const id = loan?.id || loan?.loanId; const status = String(loan?.status || ''); return <div className="loan-actions"><button className="button outline" onClick={() => onAction({ type: 'detail', loanId: id })}>View details</button><button className="button outline" onClick={() => onAction({ type: 'schedule', loanId: id })}>View repayment schedule</button>{borrower && active === 'Loans' && <button className="button outline" onClick={() => onAction({ type: 'assess', loanId: id })}>View assessment</button>}{lender && active === 'Marketplace' && status === 'OpenForFunding' && <button className="button primary" onClick={() => onAction({ type: 'contribute', loanId: id, item: loan })}>Contribute</button>}{borrower && status === 'AwaitingBorrowerAcceptance' && <button className="button primary" onClick={() => onAction({ type: 'accept', loanId: id, item: loan })}>Accept loan terms</button>}{borrower && status === 'Active' && <button className="button outline" onClick={() => onAction({ type: 'repayment', loanId: id })}>Request repayment</button>}{lender && active === 'Loans' && <button className="button outline" onClick={() => onAction({ type: 'withdraw', loanId: id })}>Withdraw contribution</button>}</div>; }
 
 function ActionDialog({ action, close, done }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [amount, setAmount] = useState(''); const [purpose, setPurpose] = useState(''); const [recipient, setRecipient] = useState(''); const [ack, setAck] = useState(false); const [detailResult, setDetailResult] = useState(null);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [amount, setAmount] = useState(''); const [purpose, setPurpose] = useState(''); const [statement, setStatement] = useState(''); const [repaymentDays, setRepaymentDays] = useState('30'); const [installments, setInstallments] = useState('4'); const [recipient, setRecipient] = useState(''); const [description, setDescription] = useState('Sandbox transfer'); const [contributionId, setContributionId] = useState(''); const [ack, setAck] = useState(false); const [detailResult, setDetailResult] = useState(null);
   const dialogRef = useRef(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   useEffect(() => { dialogRef.current?.focus(); const handleKey = (event) => { if (event.key === 'Escape') close(); }; window.addEventListener('keydown', handleKey); return () => window.removeEventListener('keydown', handleKey); }, [close]);
+  useEffect(() => {
+    if (!['detail', 'schedule', 'assess'].includes(action.type)) return;
+    let cancelled = false; setBusy(true); setError('');
+    const path = `/api/loans/${encodeURIComponent(action.loanId)}${action.type === 'schedule' ? '/schedule' : action.type === 'assess' ? '/assess' : ''}`;
+    api(path, { method: action.type === 'assess' ? 'POST' : 'GET' }).then((data) => { if (!cancelled) setDetailResult(data); }).catch((err) => { if (!cancelled) setError(err.message); }).finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [action.type, action.loanId]);
   const destructive = action.type === 'confirm' || action.type === 'reject';
   async function submit(event) {
     event.preventDefault(); setBusy(true); setError('');
     try {
       let path; let body = {}; let method = 'POST';
-      if (action.type === 'create-loan') { path = '/api/loans'; body = { amount: Number(amount), purpose }; }
-      if (action.type === 'contribute') { path = `/api/loans/${encodeURIComponent(action.loanId)}/contributions`; body = { amount: Number(amount), acceptedTerms: ack }; }
+      if (action.type === 'create-loan') { path = '/api/loans'; body = { amount: Number(amount), purpose, statement, repaymentDays: Number(repaymentDays), installments: Number(installments) }; }
+      if (action.type === 'contribute') { path = `/api/loans/${encodeURIComponent(action.loanId)}/contributions`; body = { amount: Number(amount), acknowledgedTerms: ack }; }
       if (action.type === 'repayment') { path = `/api/loans/${encodeURIComponent(action.loanId)}/repayments`; body = { amount: Number(amount) }; }
-      if (action.type === 'sandbox-transfer') { path = '/api/bmoni/transfers'; body = { amount: Number(amount), recipient }; }
+      if (action.type === 'sandbox-transfer') { path = '/api/bmoni/transfers'; body = { toBmoniUserId: recipient, amount: Number(amount), description }; }
       if (action.type === 'confirm' || action.type === 'reject') { path = `/api/approvals/${encodeURIComponent(action.id)}/${action.type}`; body = {}; }
-      if (action.type === 'schedule') { setDetailResult(await api(`/api/loans/${encodeURIComponent(action.loanId)}/schedule`)); setBusy(false); return; }
-      await api(path, { method, body: Object.keys(body).length ? body : undefined, idempotencyKey: ['confirm', 'contribute', 'repayment', 'sandbox-transfer'].includes(action.type) ? idempotencyKey.current : undefined });
-      done(action.type === 'confirm' ? 'Approval confirmed. The API accepted the action.' : action.type === 'reject' ? 'Approval rejected.' : action.type === 'contribute' ? 'Contribution sent to the API.' : 'Loan request sent to the API.');
+      if (action.type === 'schedule' || action.type === 'detail') { setDetailResult(await api(`/api/loans/${encodeURIComponent(action.loanId)}${action.type === 'schedule' ? '/schedule' : ''}`)); setBusy(false); return; }
+      if (action.type === 'assess') { setDetailResult(await api(`/api/loans/${encodeURIComponent(action.loanId)}/assess`, { method: 'POST' })); setBusy(false); return; }
+      if (action.type === 'accept') { path = `/api/loans/${encodeURIComponent(action.loanId)}/accept-terms`; body = {}; }
+      if (action.type === 'withdraw') { method = 'DELETE'; path = `/api/loans/${encodeURIComponent(action.loanId)}/contributions/${encodeURIComponent(contributionId)}`; }
+      await api(path, { method, body: Object.keys(body).length ? body : undefined, idempotencyKey: ['confirm', 'contribute', 'repayment', 'sandbox-transfer', 'accept', 'withdraw'].includes(action.type) ? idempotencyKey.current : undefined });
+      done(action.type === 'confirm' ? 'Approval confirmed.' : action.type === 'reject' ? 'Approval rejected.' : action.type === 'contribute' ? 'Contribution submitted.' : action.type === 'repayment' ? 'Repayment request sent for approval.' : action.type === 'accept' ? 'Loan terms accepted.' : action.type === 'withdraw' ? 'Contribution withdrawn.' : action.type === 'sandbox-transfer' ? 'BMONI transfer request sent for approval.' : 'Loan request submitted.');
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   }
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && close()}><section ref={dialogRef} tabIndex={-1} className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><button className="dialog-close" onClick={close} aria-label="Close">×</button><p className="eyebrow">SIMULATED ACTIVITY</p><h2 id="dialog-title">{action.type === 'create-loan' ? 'Request a loan' : action.type === 'contribute' ? 'Contribute to a loan' : action.type === 'repayment' ? 'Request a repayment' : action.type === 'sandbox-transfer' ? 'Sandbox transfer' : action.type === 'schedule' ? 'Repayment schedule' : `${action.type === 'confirm' ? 'Confirm' : 'Reject'} approval`}</h2>
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && close()}><section ref={dialogRef} tabIndex={-1} className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><button className="dialog-close" onClick={close} aria-label="Close">×</button><p className="eyebrow">SIMULATED ACTIVITY</p><h2 id="dialog-title">{action.type === 'create-loan' ? 'Request a loan' : action.type === 'contribute' ? 'Contribute to a loan' : action.type === 'repayment' ? 'Request a repayment' : action.type === 'withdraw' ? 'Withdraw a contribution' : action.type === 'accept' ? 'Accept loan terms' : action.type === 'assess' ? 'Credit assessment' : action.type === 'detail' ? 'Loan details' : action.type === 'sandbox-transfer' ? 'Sandbox transfer' : action.type === 'schedule' ? 'Repayment schedule' : `${action.type === 'confirm' ? 'Confirm' : 'Reject'} approval`}</h2>
     {destructive && <div className="confirmation-detail"><strong>{action.type === 'confirm' ? 'Confirm this simulated action?' : 'Reject this simulated action?'}</strong><p>{action.item ? Object.entries(action.item).filter(([key]) => !/password|secret|token|key/i.test(key)).slice(0, 5).map(([key, value]) => `${formatLabel(key)}: ${safeValue(value, key)}`).join(' · ') : 'Review the pending approval details before continuing.'}</p><p>No real money will move through this demo.</p></div>}
-    {(action.type === 'create-loan' || action.type === 'contribute' || action.type === 'repayment' || action.type === 'sandbox-transfer') && <form className="form" onSubmit={submit}><label>Amount (NGN)<input type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>{action.type === 'create-loan' && <label>Purpose<input required maxLength="180" value={purpose} onChange={(e) => setPurpose(e.target.value)} /></label>}{action.type === 'sandbox-transfer' && <label>Demo recipient<input required maxLength="80" value={recipient} onChange={(e) => setRecipient(e.target.value)} /></label>}{action.type !== 'repayment' && <label className="checkbox-row"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} required />{action.type === 'create-loan' ? 'I understand this is a simulated request.' : action.type === 'contribute' ? 'I reviewed the loan terms and understand returns are not guaranteed.' : 'I understand this stays within the BMONI sandbox.'}</label>}{action.type === 'repayment' && <p className="muted">This creates a simulated repayment request for approval. No funds move now.</p>}{error && <p className="message error" role="alert">{error}</p>}<button className="button primary wide" disabled={busy || (action.type !== 'repayment' && !ack)}>{busy ? 'Sending…' : action.type === 'create-loan' ? 'Send simulated request' : action.type === 'contribute' ? 'Confirm simulated contribution' : action.type === 'repayment' ? 'Request approval' : 'Run simulated transfer'}</button></form>}
-    {detailResult && <div className="advisory-result"><RecordView data={detailResult} title="Simulated repayment schedule" /></div>}
+    {(action.type === 'create-loan' || action.type === 'contribute' || action.type === 'repayment' || action.type === 'sandbox-transfer' || action.type === 'withdraw' || action.type === 'accept') && <form className="form" onSubmit={submit}>{['create-loan', 'contribute', 'repayment', 'sandbox-transfer'].includes(action.type) && <label>Amount (NGN)<input type="number" min="0.01" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>}{action.type === 'create-loan' && <><label>Purpose<input required maxLength="80" value={purpose} onChange={(e) => setPurpose(e.target.value)} /></label><label>Loan statement<textarea required maxLength="1000" rows="3" value={statement} onChange={(e) => setStatement(e.target.value)} /></label><label>Repayment period in days<input type="number" min="7" max="120" required value={repaymentDays} onChange={(e) => setRepaymentDays(e.target.value)} /></label><label>Installments<select value={installments} onChange={(e) => setInstallments(e.target.value)}><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label></>}{action.type === 'withdraw' && <label>Contribution ID<input required value={contributionId} onChange={(e) => setContributionId(e.target.value)} /><small>Use the contribution Reference ID shown in Activity after you contribute.</small></label>}{action.type === 'sandbox-transfer' && <><label>Recipient BMONI user ID<input required maxLength="128" value={recipient} onChange={(e) => setRecipient(e.target.value)} /></label><label>Description<input required maxLength="180" value={description} onChange={(e) => setDescription(e.target.value)} /></label></>}{!['repayment', 'withdraw'].includes(action.type) && <label className="checkbox-row"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} required />{action.type === 'create-loan' ? 'I understand this is a simulated request.' : action.type === 'contribute' ? 'I reviewed the loan terms and understand returns are not guaranteed.' : action.type === 'accept' ? 'I reviewed these terms and understand the platform wallet movement is simulated.' : 'I understand this stays within the BMONI sandbox.'}</label>}{action.type === 'repayment' && <p className="muted">This creates a simulated repayment request for approval. No funds move now.</p>}{error && <p className="message error" role="alert">{error}</p>}<button className="button primary wide" disabled={busy || (!['repayment', 'withdraw'].includes(action.type) && !ack)}>{busy ? 'Sending…' : action.type === 'create-loan' ? 'Send loan request' : action.type === 'contribute' ? 'Confirm contribution' : action.type === 'repayment' ? 'Request approval' : action.type === 'withdraw' ? 'Withdraw contribution' : action.type === 'accept' ? 'Accept loan terms' : 'Run sandbox transfer'}</button></form>}
+    {['detail', 'schedule', 'assess'].includes(action.type) && busy && <div className="skeleton-list" aria-label="Loading loan details"><div /></div>}
+    {error && ['detail', 'schedule', 'assess'].includes(action.type) && <p className="message error" role="alert">{error}</p>}
+    {detailResult && <div className="advisory-result"><RecordView data={detailResult} title={action.type === 'assess' ? 'Credit assessment' : action.type === 'detail' ? 'Loan details' : 'Repayment schedule'} /></div>}
+    {(action.type === 'accept') && <div className="confirmation-detail"><p>Accepting these terms marks the loan active and records its disbursement in the simulated platform wallet.</p></div>}
     {destructive && <form onSubmit={submit}>{error && <p className="message error" role="alert">{error}</p>}<div className="dialog-actions"><button type="button" className="button outline" onClick={close}>Go back</button><button className="button primary" disabled={busy}>{busy ? 'Processing…' : `Confirm ${action.type}`}</button></div></form>}
     <button type="button" className="text-button" onClick={close}>Cancel</button></section></div>;
 }
 
 function Advisory() {
   const [mode, setMode] = useState('scam-check'); const [input, setInput] = useState(''); const [result, setResult] = useState(null); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
-  async function submit(event) { event.preventDefault(); setBusy(true); setError(''); setResult(null); try { setResult(await api(mode === 'scam-check' ? '/api/scam-check' : '/api/assistant/chat', { method: 'POST', body: mode === 'scam-check' ? { message: input } : { message: input } })); } catch (err) { setError(err.message); } finally { setBusy(false); } }
+  async function submit(event) { event.preventDefault(); setBusy(true); setError(''); setResult(null); try { setResult(await api(mode === 'scam-check' ? '/api/scam-check' : '/api/assistant/chat', { method: 'POST', body: mode === 'scam-check' ? { message: input } : { question: input } })); } catch (err) { setError(err.message); } finally { setBusy(false); } }
   return <section className="advisory-box"><div className="advisory-icon">✳</div><h2>Guidance for your next step</h2><p className="muted">This tool offers general advice only. It cannot approve, initiate or authorize payments.</p><div className="segmented"><button className={mode === 'scam-check' ? 'active' : ''} onClick={() => setMode('scam-check')}>Check a message</button><button className={mode === 'chat' ? 'active' : ''} onClick={() => setMode('chat')}>Ask a question</button></div><form className="form" onSubmit={submit}><label>{mode === 'scam-check' ? 'Paste a message you want to check' : 'What would you like help with?'}<textarea rows="4" required maxLength="2000" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Do not include passwords, BVN or account secrets." /></label>{error && <div className="message error" role="alert">{error}<button className="button outline" type="button" onClick={submit}>Retry</button></div>}<button className="button primary" disabled={busy || !input.trim()}>{busy ? 'Checking…' : mode === 'scam-check' ? 'Check message' : 'Ask B Moni'}</button></form>{result && <div className="advisory-result"><h3>Advisory response</h3><RecordView data={result} title="Advisory" /></div>}</section>;
 }
 

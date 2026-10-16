@@ -1,35 +1,33 @@
 # B Moni frontend
 
-A responsive React and Vite frontend for the B Moni Nigerian student finance demo. Balances, loan activity, contributions and approvals are presented as simulated activity; the interface does not imply that demo funds are real.
+A React and Vite interface for the B Moni API and BMONI sandbox. Peer-lending balances, deposits, contributions, transfers and repayments are sandbox or simulated activity; they do not represent real cash.
 
 ## Run locally
 
-```bash
-npm install
-copy .env.example .env.local
+```powershell
+Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Set `VITE_API_BASE_URL` to the backend origin, for example `https://localhost:7001`. The frontend appends the documented `/api/...` paths itself. Do not put API keys, signing secrets, or other backend credentials in a `VITE_` variable.
+The Vite development server proxies `/api`, `/swagger` and `/health` to `http://localhost:5182` by default. Set `VITE_API_TARGET` if the API listens elsewhere. For a separately hosted frontend, set `VITE_API_BASE_URL` to the backend origin at build time and allow the frontend origin in the API's `ALLOWED_ORIGINS` setting. Do not put BMONI credentials, signer secrets, or other backend secrets in a `VITE_` variable.
 
 ## Demo mode
 
-The compact **Demo On/Off** switch is available in the sign-in view, sidebar, and mobile header. Turn it on to enter the app without an API and demonstrate seeded simulated loans, NGN wallet and transaction data, approvals, advisory tools, repayment schedules, contributions, and separate BMONI sandbox activity. Demo actions are saved locally in the browser and do not contact the backend or move real money.
+Demo mode is off by default. Set `VITE_DEMO_MODE_ENABLED=true` only when you intentionally want the local simulated client. Nigeria KYC and BMONI account operations always call the connected API and never return simulated success.
 
-- `VITE_DEMO_MODE_ENABLED=true` exposes the switch (default when unset); set it to `false` to disable demo access.
-- `VITE_DEMO_MODE_DEFAULT=true` starts each new browser session in demo mode; default is `false`.
+## Backend actions available in the interface
 
-These are Vite build-time variables. Change them in Render's environment settings and redeploy for the setting to take effect.
+- Register and sign in, read the current account, bootstrap data and health status.
+- Dashboard, wallet, score, loans, loan detail, assessment, schedule, create request, contribute, withdraw, accept terms and request repayment.
+- Wallet deposit and spend requests, pending approval review/confirmation/rejection, transaction filtering and pagination, lender returns.
+- BMONI Nigeria sandbox onboarding with both supported test personas, file uploads, balances, transactions, Nigerian bank verification and transfer approval requests.
+- Scam checks and assistant questions.
 
-## Checks
+The webhook route is an inbound partner callback and is not a user initiated frontend action. For KYC, use only BMONI sandbox personas and sample documents. The BMONI wallet remains separate from the simulated lending ledger.
+
+## Build and lint
 
 ```bash
 npm run build
 npm run lint
 ```
-
-## Backend contract status
-
-The repository contains no .NET API project, controllers, DTO definitions, or `BMoni.http`, so the frontend can only target the routes in the product brief. The response contracts and mutation request DTOs must be checked against the API before connecting a live environment. The UI renders returned records without making up financial figures and strips password, token, secret, key, and credential fields from record views. Demo account emails are read from `GET /api/bootstrap`; passwords are never displayed or stored.
-
-Implemented route groups include authentication/bootstrap, overview, loans, open-loan marketplace and lender returns, pending approvals, advisory tools, and BMONI sandbox balances/activity. The sandbox is labeled separately from peer-lending demo activity. Repayment schedules, terms acceptance, repayments, wallet deposit/spend, sandbox onboarding/verification/transfers, and pagination need their API DTOs and interaction contracts before they can be wired safely.
